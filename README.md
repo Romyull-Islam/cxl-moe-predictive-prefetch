@@ -16,34 +16,92 @@ single GPU with 4–32 GiB unified memory:
 
 Cache hit rates ≥ 0.84 at the recommended operating point (`K = top_k + 4`).
 
-## Setup
+---
+
+## 1. Clone and set up
 
 ```bash
+git clone https://github.com/Romyull-Islam/cxl-moe-predictive-prefetch.git
+cd cxl-moe-predictive-prefetch
+
 python3.12 -m venv venv_cxl
 source venv_cxl/bin/activate
 pip install torch transformers datasets bitsandbytes accelerate matplotlib tqdm numpy
 ```
 
-A single A100 80 GB is sufficient for all three backbones at 4-bit and 8-bit
-quantization. Mixtral fp16 requires sharding across 2 GPUs.
+### Hardware requirements
 
-## Predictor checkpoints
+The recorded demo runs DeepSeek-MoE-16B at FP16 and needs **~32 GB of GPU memory**
+to load the model. A single A100 (40 GB or 80 GB) or any GPU with ≥40 GB free works.
 
-The three trained predictors are committed alongside the code, under their
-canonical paths:
+Smaller consumer GPUs (24 GB or below) will OOM at FP16 — switch to
+`--quantization 4bit` (~10 GB needed) or `--quantization 8bit` (~17 GB needed)
+in the demo commands below for those.
 
+The full sweep (`./run_full_sweep.sh`) can run on a single A100; **Mixtral FP16**
+specifically requires sharding across 2 GPUs.
+
+### First run downloads ~32 GB
+
+The first invocation will pull DeepSeek-MoE-16B's checkpoint shards from
+HuggingFace into `~/.cache/huggingface/`. Takes a few minutes on a fast network;
+subsequent runs reuse the cache and load in ~30 s.
+
+---
+
+## 2. Quick demo (no retraining needed)
+
+The repo ships with the trained DeepSeek predictor at
+`deepseek_moe_16b_multi_logs/deepseek_moe_16b_multi_predictor_topk6_d4.pt`, so
+the demo runs immediately after `git clone` + setup.
+
+Run two separate inferences — one with the LRU baseline, one with our predictor —
+and compare per-token latency:
+
+```bash
+# A) BASELINE: LRU expert cache, no predictor
+./venv_cxl/bin/python prefetch_constrained.py \
+    --model deepseek_moe_16b --gpu 0 \
+    --gpu_memory_gb 16 --quantization fp16 \
+    --predict_topk_extra 4 \
+    --num_examples 8 --max_length 256 \
+    --benchmark gsm8k --simulate_transfer_ms 50.0 \
+    --policy baseline --show_generation --gen_tokens 64 \
+    --out demo_baseline.json
+
+# B) PREFETCHED: predictor + confidence-PQ + LRU + hot preload
+./venv_cxl/bin/python prefetch_constrained.py \
+    --model deepseek_moe_16b --gpu 0 \
+    --gpu_memory_gb 16 --quantization fp16 \
+    --predict_topk_extra 4 \
+    --num_examples 8 --max_length 256 \
+    --benchmark gsm8k --simulate_transfer_ms 50.0 \
+    --policy prefetched --show_generation --gen_tokens 64 \
+    --out demo_prefetched.json
 ```
-mixtral_8x7b_multi_logs/mixtral_8x7b_multi_predictor_topk2_d4.pt
-deepseek_moe_16b_multi_logs/deepseek_moe_16b_multi_predictor_topk6_d4.pt
-qwen1_5_moe_a2_7b_multi_logs/qwen1_5_moe_a2_7b_multi_predictor_topk4_d4.pt
-```
 
-You can run the demo (Section 4 below) directly after `git clone`, no retraining
-needed. To regenerate the checkpoints from scratch, use steps 1 and 2 below.
+Expected output:
 
-## Reproducing the paper
+| | Baseline | Prefetched (best K=10) |
+|---|---:|---:|
+| Per-token latency (mean) | ~5600 ms | ~1830 ms |
+| Cache hit rate | 0.42 | 0.89 |
+| **Speedup** | | **~3.0×** |
 
-### 1. Phase 1 — trace extraction (~30 min per (model, benchmark) on one A100)
+Both runs print one decoded model continuation at the end. The text is identical
+in both runs (greedy decoding on the same model + post-hoc cache simulation),
+which is the visual proof that the cache policy never affects model output.
+
+---
+
+## 3. Reproducing the paper (full pipeline, ~3 hours total)
+
+The four phases below regenerate every number in the paper from scratch. Skip to
+phase 3 if you only want to re-run the simulator with the included DeepSeek
+checkpoint; phases 1 and 2 are needed for the Mixtral and Qwen results because
+those checkpoints are not committed (size).
+
+### 3.1 Phase 1 — trace extraction (~30 min per (model, benchmark) on one A100)
 
 Captures per-token routing traces for {Mixtral, DeepSeek, Qwen} × {WikiText, MMLU, GSM8K}.
 
@@ -53,15 +111,18 @@ Captures per-token routing traces for {Mixtral, DeepSeek, Qwen} × {WikiText, MM
 
 Outputs go to `{model}_{benchmark}_logs/` as compressed `.npz` files.
 
-### 2. Phase 2 — predictor training (~30 min per backbone, multi-GPU)
+### 3.2 Phase 2 — predictor training (~30 min per backbone, multi-GPU)
 
 ```bash
 ./run_phase2_train.sh
 ```
 
-Outputs the per-backbone predictor checkpoints listed above.
+Outputs the per-backbone predictor checkpoints. Mixtral and Qwen checkpoints
+land at `mixtral_8x7b_multi_logs/...pt` and `qwen1_5_moe_a2_7b_multi_logs/...pt`
+respectively. The DeepSeek checkpoint already in the repo will be overwritten
+with a fresh-trained one.
 
-### 3. Comprehensive sweep (~30 min, single A100)
+### 3.3 Phase 3 — comprehensive sweep (~30 min, single A100)
 
 ```bash
 ./run_full_sweep.sh                     # 96 cells (Mixtral 4-bit/8-bit + DeepSeek + Qwen)
@@ -75,38 +136,9 @@ Outputs:
 - `figures/sweep_speedup_heatmap_nvme.png`
 - `figures/sweep_hitrate_vs_cap_combined.png`
 
-### 4. Single-cell demo (the recorded video)
+---
 
-Two separate runs that each show real DeepSeek inference + the chosen cache policy's
-per-token latency, plus one decoded model output for visual confirmation that the
-generated text is identical between runs (= no quality degradation).
-
-```bash
-# Baseline (LRU only, no predictor)
-python prefetch_constrained.py \
-    --model deepseek_moe_16b --gpu 0 \
-    --gpu_memory_gb 16 --quantization fp16 \
-    --predict_topk_extra 4 \
-    --num_examples 8 --max_length 256 \
-    --benchmark gsm8k --simulate_transfer_ms 50.0 \
-    --policy baseline --show_generation --gen_tokens 64 \
-    --out demo_baseline.json
-
-# Prefetched (predictor + confidence-PQ + LRU + hot preload)
-python prefetch_constrained.py \
-    --model deepseek_moe_16b --gpu 0 \
-    --gpu_memory_gb 16 --quantization fp16 \
-    --predict_topk_extra 4 \
-    --num_examples 8 --max_length 256 \
-    --benchmark gsm8k --simulate_transfer_ms 50.0 \
-    --policy prefetched --show_generation --gen_tokens 64 \
-    --out demo_prefetched.json
-```
-
-Expected: baseline ≈ 5600 ms/token at 0.42 hit rate; prefetched K=10 ≈ 1830 ms/token
-at 0.89 hit rate; **3.01× speedup**. Same generated text in both runs.
-
-## Repository layout
+## 4. Repository layout
 
 | Path | Purpose |
 |---|---|
@@ -122,7 +154,9 @@ at 0.89 hit rate; **3.01× speedup**. Same generated text in both runs.
 | `run_*.sh` | End-to-end pipeline drivers |
 | `figures/full_sweep/*.json` | All 108 simulator outputs |
 | `results_*.{json,csv}` | Tables III / IV / V data |
-| `*_multi_logs/*.pt` | Trained per-backbone predictor checkpoints |
+| `deepseek_moe_16b_multi_logs/*.pt` | Trained DeepSeek predictor checkpoint (demo) |
+
+---
 
 ## Citation
 
