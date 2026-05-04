@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv_cxl/
+
+# Trace and predictor artifacts (regenerable, multi-GB)
+*_logs/
+*_multi_logs/
+*.npz
+*.pt
+
+# HF / dataset caches
+hf_offload_cache/
+hf_offload*/
+.cache/
+
+# Old / failed sweep dirs (not used in paper)
+figures/real_baseline/
+figures/real_matrix/
+
+# Demo / transient outputs from recordings
+demo_*.json
+demo_*.log
+
+# Editor / OS junk
+.DS_Store
+*~
+*.swp
+.idea/
+.vscode/
+
+# Sweep stdout logs (paired .json next to each is the actual data)
+figures/full_sweep/*.log
+figures/full_sweep_master_*.log
+figures/mixtral_fp16_*.log
+figures/real_baseline_master*.log
+figures/real_matrix_master*.log
+figures/real_smoke_*.json
+
+# Older midterm-era per-cell prefetch JSONs (superseded by full_sweep/)
+figures/prefetch_*_*.json
+
+# Leftover demo wrapper
+demo_compare.py
