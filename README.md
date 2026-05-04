@@ -124,14 +124,6 @@ at 0.89 hit rate; **3.01× speedup**. Same generated text in both runs.
 
 ## Citation
 
-```bibtex
-@article{islam2026predictive_moe,
-  title  = {Predictive Expert Activation Modeling for Efficient MoE Inference},
-  author = {Islam, Md Romyull},
-  year   = {2026}
-}
-```
 
 ## License
-
-[choose one — MIT or Apache 2.0 are conventional for academic open-source]
+Not yet selected
