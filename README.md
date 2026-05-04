@@ -158,17 +158,7 @@ Outputs:
 
 ---
 
-## Citation
 
-```bibtex
-@misc{islam2026predictive_moe,
-  title  = {Predictive Expert Activation Modeling for Efficient MoE Inference},
-  author = {Islam, Md Romyull},
-  year   = {2026},
-  note   = {CS 8347 final report, Kennesaw State University},
-  url    = {https://github.com/Romyull-Islam/cxl-moe-predictive-prefetch}
-}
-```
 
 ## License
 
