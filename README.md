@@ -29,8 +29,8 @@ quantization. Mixtral fp16 requires sharding across 2 GPUs.
 
 ## Predictor checkpoints
 
-The trained predictors total ~123 MB. They are not committed to this repo.
-Download them from [HuggingFace link TBD] and place under:
+The three trained predictors are committed alongside the code, under their
+canonical paths:
 
 ```
 mixtral_8x7b_multi_logs/mixtral_8x7b_multi_predictor_topk2_d4.pt
@@ -38,7 +38,8 @@ deepseek_moe_16b_multi_logs/deepseek_moe_16b_multi_predictor_topk6_d4.pt
 qwen1_5_moe_a2_7b_multi_logs/qwen1_5_moe_a2_7b_multi_predictor_topk4_d4.pt
 ```
 
-Or train from scratch — see steps 1 and 2 below.
+You can run the demo (Section 4 below) directly after `git clone`, no retraining
+needed. To regenerate the checkpoints from scratch, use steps 1 and 2 below.
 
 ## Reproducing the paper
 
@@ -121,9 +122,21 @@ at 0.89 hit rate; **3.01× speedup**. Same generated text in both runs.
 | `run_*.sh` | End-to-end pipeline drivers |
 | `figures/full_sweep/*.json` | All 108 simulator outputs |
 | `results_*.{json,csv}` | Tables III / IV / V data |
+| `*_multi_logs/*.pt` | Trained per-backbone predictor checkpoints |
 
 ## Citation
 
+```bibtex
+@misc{islam2026predictive_moe,
+  title  = {Predictive Expert Activation Modeling for Efficient MoE Inference},
+  author = {Islam, Md Romyull},
+  year   = {2026},
+  note   = {CS 8347 final report, Kennesaw State University},
+  url    = {https://github.com/Romyull-Islam/cxl-moe-predictive-prefetch}
+}
+```
 
 ## License
-Not yet selected
+
+Not yet selected. The intended license is MIT (permissive, academic-friendly);
+will be added before public release.
